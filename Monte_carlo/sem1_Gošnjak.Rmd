@@ -1,0 +1,546 @@
+---
+title: "Seminarska naloga 1"
+author: "Tanja Gošnjak"
+date: "2023-11-13"
+output: html_document
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(ggforce)
+library(tidyverse)
+```
+
+## Uvod
+V seminarski nalogi se bomo ukvarjali z izračunom zlatega reza $\phi$, ki je definiran kot
+$$ ϕ= \frac{1+\sqrt{5}}{2}$$. Za ocenjevanje zlatega reza bomo uporabili metodo Monte Carlo. 
+Metoda Monte Carlo je simulacijska metoda, kjer lahko s pomočjo naključnih točk in ponavljanj metode ocenimo ploščino likov in rešujemo zapletene matematične probleme. 
+Primer uporabe metode bomo najprej predstavili na primeru izračuna števila $\pi$.
+
+```{r}
+#generiramo naključno točko v kvadratu
+nakljucna_tocka = function(){
+  x = runif(1, -1, 1)
+  y = runif(1, -1, 1)
+  return(c(x, y))
+}
+
+#preverimo, ali točka leži znotraj krožnice
+tockavkrogu = function(a, b){
+  sredisce_x = 0
+  sredisce_y = 0
+  polmer = 1
+  
+  #c^2 = a^2 + b^2
+  if (a>=(sredisce_x-polmer)){ 
+    x_kvadrat = (sredisce_x-(a))^2
+    y_kvadrat = (sredisce_y-(b))^2
+    razdalja = sqrt(x_kvadrat + y_kvadrat)
+    
+    if (razdalja <= polmer){
+      result = TRUE
+    }else{
+      result = FALSE
+    }
+  }
+  
+  if (a<sredisce_x-polmer){
+    result = FALSE
+  }
+  return(result)
+}
+
+#generiramo veliko točk in preverjamo, ali ta leži v krogu
+znotraj=0
+stposkusov=1000000
+for (i in 1:stposkusov){
+  tocka = nakljucna_tocka()
+  a = tocka[1]
+  b = tocka[2]
+  
+  vkrogu = tockavkrogu(a, b)
+    
+  if (vkrogu == TRUE){
+    znotraj = znotraj + 1
+  }
+}
+
+#delež števila točk znotraj kroga pomnožimo s 4 in dobimo približek števila Pi
+delez = znotraj/stposkusov * 4
+
+delez
+```
+```{r, echo = FALSE}
+kvadrat = data.frame(
+  x = c(-1, -1, 1, 1),
+  y = c(-1, 1, 1, -1) 
+)
+
+xK = NULL
+yK = NULL
+for (i in 1:1000){
+  tocka = nakljucna_tocka()
+  xK = c(xK, tocka[1])
+  yK = c(yK, tocka[2])
+}
+
+rtockeK = data.frame(
+  xK,
+  yK
+)
+
+#izirs grafa generiranja naključnih točk v krogu,
+#ki je vrisan v kvadrat
+ggplot()+
+  geom_polygon(data=kvadrat,
+               aes(x = x, y=y), 
+               fill = "red", 
+               color = "black", 
+               alpha=0.2)+
+  geom_circle(aes(x0 = 0, 
+                  y0 = 0, 
+                  r = 1),
+              fill = "blue", 
+              alpha = 0.2)+
+  coord_fixed()+
+  geom_point(data=rtockeK, 
+             aes(x=xK, y=yK))+
+  labs(title="Ocenjevanje števila pi")
+
+  
+```
+
+Pri primeru imamo kvadrat velikosti 2×2, v katerem je vrisan krog s polmerom 1 (sredične kroga in središče krožnice sta enaka). Če generiramo naključne točke v kvadratu in nas zanima verjetnost, koliko od teh točk pade v krožnico, bi to izračunali kot ploščina krožnice deljeno s ploščino kvadrata. Verjetnost, da zadanemo krog (oziroma ploščina kroga/ploščina pravokotnika), bi po izračunu bila $\pi$ četrtin.
+V naši simulaciji smo tako generirali točke na območju, ki ga omejuje kradrat [-1,1]×[-1,1] in preverjamo, katere točke so znotraj kroga (x^2 + y^2 = 1). Število točk, ki ležijo v krogu, smo delili z vsemi generiranimi točkami. Delež, ki ga dobimo je zato približek vrednosti ploščine kroga s ploščino kvadrata oziroma $\pi$ četrtin. Vrednost, ki smo jo dobili, smo množili s 4, da dobili približek štrevila $\pi$ (3,14).
+
+
+## Prvi način
+```{r}
+
+rtocka1 = function(){
+  # točka v pravokotniku [0, 1] × [0, 2]
+  ax=1
+  ay=2
+  x = runif(1, min=0, max=ax)
+  y = runif(1, min=0, max=ay)
+  return(c(x, y))
+}
+
+# določimo ploscino pravokotnika
+plPrav =  1*2
+
+# enakokraki trikotnik
+# določimo npr. a = 1
+
+
+a = 1
+kot = (pi-(2*((2*pi)/5)))/2
+#izračun višine trikotnika
+Va = (a/2)/tan(kot) 
+
+# določim koordinate trikotnika
+A = c(0, 0)
+B = c(1, 0)
+C = c((A[1]+B[1])/2, Va)
+
+ploscinaT = function(A, B, C){
+  x1 = A[1]
+  x2 = B[1]
+  x3 = C[1]
+  y1 = A[2]
+  y2 = B[2]
+  y3 = C[2]
+  
+  ploscina = abs((x1 * (y2 - y3) + x2 * (y3 - y1) + 
+                    x3 * (y1 - y2)) / 2)
+  
+  return(ploscina)
+}
+
+
+# ploscinaT(A, B, C)
+
+vtrikotniku = function(A, B, C, P){
+  
+  # ploščina triktonika ABC
+  p1 = ploscinaT(A, B, C)
+  
+  # ploščina trikotnika PBC
+  p2 = ploscinaT(P, B, C)
+  
+  # ploščina trikotnika PAC
+  p3 = ploscinaT(P, A, C)
+  
+  # ploščina trikotnika PAB
+  p4 = ploscinaT(P, A, B)
+  
+  # preveri, če je vsota ploščin p2, p3 in p4 enaka p1
+  if (p1 == p2 + p3 + p4){
+    znotraj = TRUE
+  }
+    else{
+      znotraj = FALSE
+    }
+  
+  return(znotraj)
+}
+
+# vtrikotniku(A, B, C, c(0,0))
+
+
+preveriznotraj = function(n){
+  znotraj=0
+  for (i in 1:n){
+    tocka = rtocka1()
+    a = tocka[1]
+    b = tocka[2]
+  
+    trikotnik = vtrikotniku(A, B, C, c(a, b))
+    
+    if (trikotnik == TRUE){
+      znotraj = znotraj + 1
+    }
+  }
+  
+  plPrav = 2
+  delez = znotraj/n
+  
+  # množimo s konstanto, ki nam na koncu da rezultat zlatega reza
+  # zlatirez = (delez točk v trikotniku * 2 * ploščina pravokotnika)/(a^2 * cos(pi/10))
+  zlatirez = (delez*2*plPrav)/(1^2 * cos(pi/10))
+
+  return(zlatirez)
+}
+
+
+n=10000
+
+preveriznotraj(n)
+```
+
+```{r, echo=FALSE}
+shapes_data = data.frame(
+  xT = c(A[1], B[1], C[1], NA),
+  yT = c(A[2], B[2], C[2], NA),
+  xP = c(0, 0, 1, 1),
+  yP = c(2, 0, 0, 2)
+)
+
+xt = NULL
+yt = NULL
+for (i in 1:1000){
+  tocka = rtocka1()
+  xt = c(xt, tocka[1])
+  yt = c(yt, tocka[2])
+}
+
+rtocke = data.frame(
+  xt,
+  yt
+)
+
+# Izris pravokotnika in trikotnika z uporabo geom_polygon
+# z dodanimi generiranimi naključnimi točkami
+ggplot() +
+  geom_polygon(data = shapes_data, 
+               aes(x = xT, y=yT), 
+               fill = "blue", 
+               color = "black", 
+               alpha=0.3, 
+               linewidth=0.8) +
+  geom_polygon(data = shapes_data, 
+               aes(x = xP, y=yP), 
+               fill = "red", 
+               color = "black", 
+               alpha=0.2) +
+  coord_fixed() +
+  xlim(-0.5, 1.5) +
+  ylim(-0.5, 2.5) +
+  labs(title = "Grafični prikaz prvega načina") +
+  xlab("x") +
+  ylab("y") +
+  geom_point(data=rtocke, 
+             aes(x=xt, y=yt),
+             size=0.9)
+  
+```
+
+
+Pri prvem načinu smo v koordinatni sistem v pravokotnik vrisali trikotnik s kotom $\alpha$ = 2$\pi$/5 in osnovno stranico a=1. Za ploščino trikotnika je veljala enačba $$ A = ϕ \cdot a^2 \cdot cos(π/10)/2. $$
+Zanimala nas je ploščina trikotnika. To smo računali na enak način kot pri krogu v prejšnjem primeru. Gre za to, da lahko ploščino trikotnka izračunamo, če poznamo velikost pravokotnika in delež trikotnika v tem pravokotniku. Če generiramo naključne točke, je verjetnost, da zadane triktonik, ravno enaka deležu trikotnika v tem pravokotniku. Generirali smo veliko število točk, za katere smo preverjali, ali pade v trikotnik ali ne. Če točka P pade v trikotnik, pomeni, da je seštevek ploščin PBC, PAC in PAB enaka ploščini ABC. Število točk, ki so padle v trikotnik smo delili s številom generiranih točk in dobili razmerje, ki predstavlja oceno razmerja med ploščino trikotnika in ploščino pravokotnika. Iz razmerij ploščin trikotnika in pravokotnika smo izrazili zlati rez in izračunali njegov približek (1,6).
+
+
+## Drugi način
+
+```{r}
+rtocka2 = function(){
+  # točka v pravokotniku [0, 0.5] × [0, 1.5]
+  ax=0.5
+  ay=1.5
+  x = runif(1, min=0, max=ax)
+  y = runif(1, min=0, max=ay)
+  return(c(x, y))
+}
+
+# rtocka2()
+
+plPravokotnikI = 0.5 * 1.5
+
+# funkcija pod katero ploščino primerjamo
+f = function(x) 1/sqrt(1+x^2)
+
+P = c(0, 0.5)
+
+podkrivuljo = function(P){
+  # preverimo ali je vrednost v točki P manjša ali enaka 
+  # vrednosti funkcije pod krivuljo 
+  f_y = 1/sqrt(1+P[1]^2)
+  if (P[2] <= f_y){
+    znotraj = TRUE
+  }else{
+    znotraj = F
+  }
+  return(znotraj)
+}
+
+preveripodkrivuljo = function(n){
+  # točko v pravokotniku generiramo n-krat
+  znotraj=0
+  for (i in 1:n){
+    tocka = rtocka2()
+    a = tocka[1]
+    b = tocka[2]
+  
+    
+    integral = podkrivuljo(c(a, b))
+    
+    # seštevamo število točk, ki ležijo pod krivuljo
+    if (integral == TRUE){
+      znotraj = znotraj + 1
+    }
+  }
+  
+  plPravokotnikI = 0.5 * 1.5
+  delezintegral = znotraj/n
+  
+  # izračunamo zlati rez glede na podano zvezo
+  ploscina = delezintegral*plPravokotnikI
+
+  zlatirezI = exp(ploscina)
+ 
+  return(zlatirezI)
+}
+
+
+n=10000
+
+preveripodkrivuljo(n)
+```
+
+```{r, message=FALSE, echo=FALSE}
+pravokotnik = data.frame(
+  xP = c(0, 0.5, 0.5, 0),
+  yP = c(0, 0, 1.5, 1.5)
+)
+
+xI = NULL
+yI = NULL
+for (i in 1:1000){
+  tocka = rtocka2()
+  xI = c(xI, tocka[1])
+  yI = c(yI, tocka[2])
+}
+
+rtockeI = data.frame(
+  xI,
+  yI
+)
+
+
+#grafični prikaz drugega načina uporabe metode Monte Carlo
+#iziris ploščine pod krivuljo v pravokotniku in generirane točke
+ggplot() +
+  xlim(0, 0.5) +
+  geom_function(fun = f, 
+                color="black",
+                size=0.75)+
+  geom_area(aes(xlim=c(0,0.5)),stat="function", fun=f)+
+  geom_polygon(data=pravokotnik, 
+             aes(x=xP, y=yP),
+             fill = "red", 
+             color = "black",
+             alpha=0.2)+
+  geom_point(data=rtockeI, 
+             aes(x=xI, 
+                 y=yI))+
+  xlab("x")+
+  ylab("y")+
+  labs(title="Grafični prikaz drugega načina uporabe metode Monte Carlo")
+```
+
+V drugem načinu smo generirali točke znotraj pravokotnika v odmočju od x=0 do x=0.5, kjer velja zveza $$ log(ϕ) = \int_{0}^{0.5}{\frac{1}{\sqrt{1+x^2}} dx} $$. Izračunali smo delež točk pod krivuljo z vsemi generiranimi točkami. Pri tem smo enako uporabili dejstvo, da je verjetnost točk, ki padejo pod krivuljo glede na pravokotnik, enaka deležu površine pod krivuljo s pravokotnikom. Iz izračuna deleža in podane zveze smo lahko izrazili in izračunali oceno zlatega reza.
+
+## Primerjava
+
+
+
+
+```{r, echo=FALSE}
+# ocenimo zlati rez po metodi ena in dva večkrat (ponovitve)
+# ponovitve naredimo za n generiranih točk
+ocenjevanje = function(n, ponovitve){
+  StPoskusa = NULL
+  ocenaZR1 = NULL
+  ocenaZR2 = NULL
+  for (i in 1:ponovitve){
+    ocena1 = preveriznotraj(n)
+    ocena2 = preveripodkrivuljo(n)
+    StPoskusa = c(StPoskusa, i)
+    ocenaZR1 = c(ocenaZR1, ocena1)
+    ocenaZR2 = c(ocenaZR2, ocena2)
+  }
+  return (data.frame(
+    StPoskusa,
+    ocenaZR1,
+    ocenaZR2
+  ))
+}
+
+df100 = ocenjevanje(100, 100)
+df500 = ocenjevanje(500, 100)
+df1000 = ocenjevanje(1000, 100)
+df5000 = ocenjevanje(5000, 100)
+df10000 = ocenjevanje(10000, 100)
+df100000 = ocenjevanje(100000, 100)
+
+
+#združimo vse generirane podatke v en podatkovni okvir
+merged = merge(df100, df500, by="StPoskusa")
+
+#names(merged)
+names(merged)[2] = "ocenaZR1_100"
+
+names(merged)[3] = "ocenaZR2_100"
+names(merged)[4] = "ocenaZR1_500"
+names(merged)[5] = "ocenaZR2_500"
+
+merged = merge(merged, df1000, by ="StPoskusa")
+names(merged)[6] = "ocenaZR1_1000"
+names(merged)[7] = "ocenaZR2_1000"
+
+merged = merge(merged, df5000, by ="StPoskusa")
+names(merged)[8] = "ocenaZR1_5000"
+names(merged)[9] = "ocenaZR2_5000"
+
+merged = merge(merged, df10000, by ="StPoskusa")
+names(merged)[10] = "ocenaZR1_10000"
+names(merged)[11] = "ocenaZR2_10000"
+
+merged = merge(merged, df100000, by ="StPoskusa")
+names(merged)[12] = "ocenaZR1_100000"
+names(merged)[13] = "ocenaZR2_100000"
+#names(merged)
+
+#podatkovni okvir spremenimo, da so vse vrednosti zlatega reza v eni spremenljivki
+novdf = data.frame(
+  StPoskusa = rep(1:100, 12),
+  zlatirez = c(merged$ocenaZR1_100, merged$ocenaZR1_500, 
+               merged$ocenaZR1_1000, merged$ocenaZR1_5000, 
+               merged$ocenaZR1_10000, merged$ocenaZR1_100000, 
+               merged$ocenaZR2_100, merged$ocenaZR2_500, 
+               merged$ocenaZR2_1000, merged$ocenaZR2_5000, 
+               merged$ocenaZR2_10000, merged$ocenaZR2_100000),
+  p1_p2 = c(rep("Prvi način", 600), rep("Drugi način", 600)),
+  StTock = c(rep(100, 100), rep(500, 100),
+             rep(1000, 100), rep(5000, 100),
+             rep(10000, 100), rep(100000, 100))
+)
+
+novdf$p1_p2 = factor(novdf$p1_p2, levels=c("Prvi način", "Drugi način"))
+novdf$StTockF = as.factor(novdf$StTock)
+```
+
+```{r, message=FALSE, echo=FALSE}
+#Primerjava načinov z Boxplotom
+
+Zlrez = (1+sqrt(5))/2
+
+ggplot(data=novdf, aes(x=StTockF, y=zlatirez, fill=p1_p2, alpha=0.2))+
+  geom_boxplot(aes())+
+  facet_grid(~p1_p2)+
+  geom_hline(yintercept = Zlrez, linetype="dashed")+
+  labs(title = "Primerjava prvega in drugega načina uporabe metode Monte Carlo")+
+  xlab("Število točk uporabljenih v simulaciji")+
+  ylab("Vrednost zlatega reza") +
+  guides(fill= FALSE, alpha=FALSE)+
+  annotate(geom="text",x=6,y=1.70,label=paste("zlati rez: \n",round(Zlrez,3)), size=2.5)
+```
+
+
+Na sliki smo primerjali uporabo izračuna zlatega reza z metode Monte Carlo po dveh načinih. Zveza zlati rez in ploščina trikotnika - prvi način in zveza zlati rez in ploščina pod krivuljo kvadratne funkcije - drugi način. Za oba načina smo naredili simulacijo 100 ponovitev generiranja naključnih točk. Naključnih točk smo generirali 100, 500, 1000, 5000, 10000 in 100000.
+Na sliki je predstavljena primerjava načinov z boxplotom. Pri tem lahko opazimo, da so vrednosti pei drugem načinu manj razpršene kot v prvem načinu. Poleg tega pa vrednosti v drugem načinu manj odstopajo od pričakovane vrednosti zlatega reza (1,618), kar opazimo s primerjavo prave vrednosti z mediano. V prvem načinu so vrednosti mediane bolj odmaknjene od vrednosti zlatega reza. Pri obeh načinih opazimo, da se z večanjem števila naključnih točk manjša razpršenost ocenjenih vrednosti. 
+
+
+
+
+```{r, message=FALSE, echo=FALSE}
+
+#Primerjava načinov s hitrogramom
+ggplot(data=novdf, mapping=aes(x=zlatirez))+
+  geom_histogram()+
+  facet_grid(p1_p2~StTock)+
+  xlab("Vrednost zlatega reza")+
+  ylab("Frekvenca")+
+  labs(title="Primerjava ocen vrednosti zlatega reza med prvim in drugim načinom \n
+       med različnimi števili generiranih točk uporabljenih v metodi Monte Carlo")
+
+```
+
+
+
+Na sliki so predstavljni histogrami generiranih ocen pri vseh velikostih vzorca za oba načina. Enako opazimo, da so z večanjem števila generiranih točk, te bolj skoncentrirano razporejene okoli prave vrednosti zlatega reza. Poleg tega vidimo, da je ocenjevanje z drugim načinom bolj natančno, saj so vrednosti tudi pri manjšem vzorcu generiranih točk manj razpršene okoli pričakovane vrednosti. Na velikost ocene vpliva velikost pravokotnika, v katerem generiramo točke. Z večanjem površine, ki je ne zasede lik, katerega ploščino ocenjujemo, se veča razpršenost točk okoli pričakovane vrednosti. Razlog je v tem, da lik zasede manjši del celotne površine, kjer generiramo točke, kar pa vpliva na to, da je pri manjšem številu točk, ki jih generiramo, manjša verjetnost, da bo zadela območje, ki ga ocenjujemo.
+
+
+
+
+```{r, message=FALSE, echo=FALSE}
+#INTERVAL ZAUPANJA
+
+#ustvarimo nov data frame, kjer bomo izračunali 
+#povprečja, 2,5 percentil, 97,5 percentil
+IZdf = data.frame(
+  p1_p2 = c(rep("Prvi način", 6), rep("Drugi način", 6)),
+  StTock = c(100, 500, 1000, 5000, 10000, 100000)
+  
+)
+
+IZdf$StTock = as.factor(IZdf$StTock)
+IZdf$meansapply = sapply(merged, function(x) mean(x))[2:13]
+IZdf$first2_5 = sapply(merged, function(x) qnorm(0.025, mean(x), sd(x)))[2:13]
+IZdf$last2_5 = sapply(merged, function(x) qnorm(0.975, mean(x), sd(x)))[2:13]
+IZdf$p1_p2 = factor(IZdf$p1_p2, levels=c("Prvi način", "Drugi način"))
+
+
+ggplot(data=IZdf, aes(x=StTock, y=meansapply, fill=p1_p2, color=p1_p2))+
+  geom_pointrange(aes(ymin=first2_5, ymax=last2_5))+
+  facet_grid(~p1_p2)+
+  geom_hline(yintercept = Zlrez, linetype="dashed")+
+  labs(title = "95% interval zaupanja za prvi in drugi način metode Monte Carlo")+
+  xlab("Število točk uporabljenih v simulaciji")+
+  ylab("Vrednost zlatega reza") +
+  guides(col= FALSE, fill=FALSE)+
+  annotate(geom="text",x=6,y=1.55,label=paste("zlati rez: \n",round(Zlrez,3)), size=2.5)
+```
+
+
+Izračunali smo 95% interval zaupanja. S točkami so predstavljena povprečja posameznih meritev. Opazimo, da so povprečja pri drugem načinu v vseh simulacijah pri vrednosti zlatega reza, medtem ko so pri prvem načinu povprečja pri manjših vzorcih generiranih točk bolj oddaljena od prave vrednosti in se z večanjem vzorca vedno bolj bližajo vrendosti y=1,618. Pri obeh načinih opazimo, da je 95% interval zaupanja večji pri manjših vzorcih in z večanjem vzorca pada. To je pričkovano, saj se večanjem vzorca manjša standardna napaka, ki vpliva na razprešenost točk. Interval zaupanja je pri enakem številu generiranih točk pri prvem načinu večji kot pri drugem, kar kaže na to, da smo z drugim načinom uspešneje določali vrednost zlatega reza.
+
+## Zaključek
+
+
+
+Ugotovili smo, da je metoda Monte Carlo uporabna metoda za ocenjevanje zlatega reza. Pri tem smo morali poznati zvezo s katero je vrednost zlatega reza povezana s površino na grafu. Ugotovili smo, da je ocenjevanje natančenjše z večanjem števila generiranih točk, kar je povezano s standardno napako, ki je pri večjih vzorcih, manjša. Na ocenjevanje vpliva tudi velikost ploščine, ki jo ocenjujemo glede na velikost pravokotnika. Če lik zasede manjši delež pravokotnika, v katerem generiramo naključne točke, je ocenjena verjetnost slabša, predvsem pri manjših vzorcih. Pri generiranju naključnih točk pa se lahko vprašamo tudi, do katere meje so točke zares generirane naključno, kar je bistvena karakteristika metode Monte Carlo.
+
