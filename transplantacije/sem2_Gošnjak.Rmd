@@ -1,0 +1,417 @@
+---
+title: "Povezanost dolžine intenzivne oskrbe prejemnika z nujnostjo transplantacije"
+author: "Tanja Gošnjak"
+date: "2023-12-05"
+output:
+  pdf_document:
+    extra_dependencies: float
+---
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(fig.pos = "H", out.extra = "", echo=FALSE)
+library(haven)
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(gridExtra)
+library(dplyr)
+```
+
+# Uvod in raziskovalno vprašanje
+Poročilo je narejeno v sklopu predmeta Računalniška podpora statistiki. V poročilu se ukvarjamo s podatki pridobljenimi za osebe, ki so potrebovale transplantacijo jeter. Pri analizi bi radi ocenili uspešnost transplantacijskega programa in učinke različnih dejavnikov, ki vplivajo na uspešnost programa. Cilj projekta je tudi oceniti ustreznosti nekaterih spremenljivk oziroma njihovo ujemanje s tem, kar pričakujemo pri bolnikih.
+
+Namen tega poročila je odgovoriti na vprašanje, ali je dolžina intenzivne oskrbe prejemnika povezana z nujnostjo transplantacije.
+
+# Čiščenje podatkov
+```{r, include=FALSE}
+podatki = read_sav("Lebertabelle_anon.sav")
+
+#izberemo spremenljivke
+analiza = select(podatki, sex, recipient_urgency, days_ICU, age, recipient_indication)
+
+#spremenimo spremenljivke v faktor, kjer je to potrebno, odstranimo zapis za SPSS
+
+analiza = as_factor(analiza)
+
+analiza = data.frame(lapply(analiza, function(x) {
+  if (!is.factor(x)) {
+    attr(x, "format.spss") = NULL
+  }
+  return(x)
+}))
+
+#spremenimo vrednosti v fakotrju za spol
+levels(analiza$sex) = c("M", "Ž")
+
+#izbrišemo vrednosti NA
+analiza = filter(analiza, rowSums(is.na(analiza)) != ncol(analiza))
+
+#spremenimo vrednosti v faktorju za stopnjo nujnosti
+levels(analiza$recipient_urgency) = c("naročeni", "urgentno")
+
+#naredimo kategorije za starost
+analiza$starostna_skupina =  cut(analiza$age, breaks=c(0,30,40,50,60,70,Inf), labels=c('pod 30 let', '30-40 let', '40-50 let', '50-60 let', '60-70 let', 'nad 70 let'))
+```
+
+Pridobljene podatke iz datoteke "Lebertabelle_anon.sav" smo pregledali in prečistili. Pri podatkih naročnik ni opozoril na nobeno napako v podatkih. Po pregledu napak v preverjanih spremenljivkah (spol, starost, nujnost transplantacije, dolžina intenzivne oskrbe, indikacija transplantacije) nismo zaznali nesmiselnih odstopanj. 
+Pred obdelavo podatkov smo te očistili in pripravili za nadalnje delo:
+
+ + iz podatkov smo izbrali spremenljivke spol, starost, nujnost transplantacije, dolžina intenzivne oskrbe in indikacija transplantacije,
+  + izločili smo posameznike, kjer ni bilo hkrati podatkov o spolu, starosti, nujnosti transplantacije, dolžini intenzivne oskrbe in indikacijah transplantacije,
+  + pri spremenljivki stopnja nujnosti smo "elective" prevedli kot "naročeni" in "HU" kot "urgentno".
+
+# Predstavitev vzorca
+
+```{r}
+#samo podatki, ki ne vsebujejo NA
+vrstice_brez_na = complete.cases(analiza[, c("recipient_urgency", "days_ICU")])
+ociscen = analiza[vrstice_brez_na, ]
+ociscen$dni_ICU =  cut(ociscen$days_ICU, breaks=c(-Inf, 5, Inf), labels=c('do 5 dni', 'nad 5 dni'))
+
+#število oseb v vzorcu
+stOseb = length(ociscen$sex)
+
+#število NA za stopnjo nujnosti
+NAurgency = sum(is.na(analiza$recipient_urgency))
+
+#število NA za število dni v intenzivni negi
+NAday = sum(is.na(analiza$days_ICU))
+```
+
+V osnovnem vzorcu za `r NAurgency` posameznikov nimamo podatka o stopnji nujnosti in za `r NAday` posameznikov nimamo podatka o številu dni prejemnika v intenzivni oskrbi.
+V očiščenem vzorcu imamo podatke za `r stOseb` posameznikov o njihovem spolu, starosti, stopnji nujnosti, številu dni v intenzivni oskrbi in indikaciji transplantacije. Očiščen vzorec predstavlja pomnožico osnovnega vzorca, kjer imamo za vse enote podatek o številu dni v intenzivni oskrbi in stopnji nujnosti. Pri ostalih spremenljivkah smo dopustili manjkajoče vrednosti (NA), saj bi v nasprotnem primeru iz vzorca izločili enote, ki lahko odgovarjajo na naše vprašanje o povezanosti med dolžino intenzivne oskrbe prejemnika z nujnostjo transplantacije. 
+Poročamo število dni v intenzivni negi glede na stopnjo nujnosti.
+
+V nadaljevanju je grafični prikaz frekvenc spola in starosti prejemnikov transplantiranih jeter.
+```{r, warning=FALSE, message=FALSE}
+#izris graf spol
+graf1 = ggplot(data=ociscen)+
+  geom_bar(aes(x=sex), binwidth = 15)+
+  ylab("Frekvenca") +
+  xlab("Spol prejemnika") +
+  ggtitle("Prikaz frekvence spola prejemnikov")+
+  theme(plot.title = element_text(size=12))
+
+#izris graf starost
+graf2 = ggplot(data=ociscen)+
+  geom_histogram(aes(x=age), binwidth = 15)+
+  ylab("Frekvenca") +
+  xlab("Starost prejemnika")+
+  ggtitle("Prikaz frekvence starosti prejemnikov")+
+  theme(plot.title = element_text(size=12))
+
+#zdruzi
+grid.arrange(graf1, graf2, ncol = 2)
+```
+
+```{r}
+#graf starostka skupina glede na spol
+ggplot(data=ociscen)+
+  geom_bar(aes(x=starostna_skupina))+
+  facet_grid(.~sex)+
+  ylab("Frekvenca") +
+  xlab("Starostna skupina prejemnika")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  ggtitle("Prikaz starosti prejemnikov glede na spol")+
+  theme(plot.title = element_text(size=12))
+```
+
+
+
+Prikazana je preglednica frekvenc (Table 1) po spolu s povprečno starostjo in standardnim odklonom glede na spol.
+
+
+```{r}
+#tabela spol, število, starost prejemniki
+tabelaspol = data.frame(table(analiza$sex))
+
+#izračun povprečja in sd
+analizaZ = analiza[analiza$sex == "Ž",]
+analizaM = analiza[analiza$sex == "M",]
+povp_ageZ = mean(analizaZ$age, na.rm=T)
+povp_ageM = mean(analizaM$age, na.rm=T)
+sdM = sd(analizaM$age, na.rm=T)
+sdZ = sd(analizaZ$age, na.rm=T)
+
+tabelaspol = cbind(tabelaspol, c(povp_ageM, povp_ageZ), c(sdM, sdZ))
+
+tabelaspol = tabelaspol %>%
+  kable(col.names = c("Spremenljivka", "Frekvenca", "Povprečna starost", "Standardni odklon"), caption="Preglednica za spol in povprečno starost") %>%
+  kable_styling(full_width = T, latex_options = "hold_position")
+
+tabelaspol
+
+```
+
+Prikažemo spremenljivki stopnja nujnosti in število dni v intenzivni oskrbi glede na spol.
+
+```{r}
+
+#urgentnost po spolu
+graf3 = ggplot(data = subset(analiza, !is.na(recipient_urgency)))+
+  geom_bar(aes(x=recipient_urgency))+
+  facet_grid(.~sex)+
+  xlab("Stopnja nujnosti")+
+  ylab("Frekvenca")+
+  ggtitle("Frekvenca po spolu v intenzivni oskrbi")+
+  theme(plot.title = element_text(size=9))
+
+#dni v intenzivni po spolu
+graf4 = ggplot(data = subset(analiza, !is.na(days_ICU)))+
+  geom_histogram(aes(x=days_ICU), binwidth = 30)+
+  facet_grid(.~sex)+
+  xlab("Število dni v intenzivni oskrbi")+
+  ylab("Frekvenca")+
+  ggtitle("Frekvenca števila dni v intenzivni oskrbi")+
+  theme(plot.title = element_text(size=9))
+
+grid.arrange(graf3, graf4, ncol = 2)
+```
+
+
+Prikažemo spremenljivki spol in število dni v intenzivni oskrbi glede na stopnjo nujnosti.
+
+```{r}
+# spol glede na urgentnost
+graf5 = ggplot(data=ociscen)+
+  geom_bar(aes(x=sex))+
+  ylab("Frekvenca") +
+  xlab("Spol prejemnika")+
+  facet_grid(.~recipient_urgency)+
+  ggtitle("Frekvenca po spolu v intenzivni oskrbi")+
+  theme(plot.title = element_text(size=10))
+
+#št. dni glede na urgentnost
+graf6 = ggplot(data=ociscen)+
+  geom_histogram(aes(x=days_ICU), binwidth = 50)+
+  facet_grid(.~recipient_urgency)+
+  xlab("Število dni v intenzivni oskrbi")+
+  ylab("Frekvenca")+
+  ggtitle("Frekvenca števila dni v intenzivni oskrbi")+
+  theme(plot.title = element_text(size=10))
+
+grid.arrange(graf5, graf6, ncol = 2)
+
+```
+
+V preglednici (Table 2) prikažemo frekvenco enot glede na stopnjo nujnosti in povprečno število dni s standardnim odklonom v intenzivni oskrbi.
+
+```{r}
+#tabela št. dni v oskrbi
+tabelaOskrba = data.frame(table(analiza$recipient_urgency))
+
+#izračun povprečja in sd
+analizaU = analiza[analiza$recipient_urgency == "urgentno", ]
+analizaN = analiza[analiza$recipient_urgency == "naročeni", ] 
+povpU = mean(analizaU$days_ICU, na.rm = T)
+povpN = mean(analizaN$days_ICU, na.rm = T)
+sdU = sd(analizaU$days_ICU, na.rm = T)
+sdN = sd(analizaN$days_ICU, na.rm = T)
+
+tabelaOskrba = cbind(tabelaOskrba, c(povpN, povpU), c(sdN, sdU))
+
+tabelaOskrba = tabelaOskrba %>%
+  kable(caption="Preglednica za stopnjo nujnosti in povprečno število dni v intenzivni oskrbi", col.names = c("Spremenljivka", "Frekvenca", "Povprečno število dni v intenzivni oskrbi", "Standardni odklon")) %>%
+  kable_styling(full_width = T, latex_options = "hold_position")
+
+tabelaOskrba
+```
+
+
+Prikažemo grafični prikaz indikacij za transplantacijo jeter.
+
+```{r}
+# graf indikacija za transplantacijo jeter
+ggplot(data=ociscen, aes(fill=recipient_indication))+
+  geom_bar(aes(recipient_indication))+
+  facet_grid(.~recipient_urgency)+
+  xlab("Indikacija transplantacije jeter")+
+  ylab("Frekvenca")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_fill_discrete(labels = c("AAT" = "Alpha-1 Antitrypsin Deficiency", 
+                               "AIH" = "Autoimmune hepatitis",
+                               "ALD" = "Alcohol-related liver disease",
+                               "HBV" = "Hepatitis B",
+                               "HCC" = "Hepatocellular carcinoma",
+                               "HCV" = "Hepatitis C",
+                               "LM/NET" = "Liver Metastases/Neuroendocrine Tumours",
+                               "NASH" = "Nonalcoholic fatty liver disease",
+                               "PBC" = "Primary biliary cholangitis",
+                               "Sonstige" = "Sonstige",
+                               "SSC" = "Secondary sclerosing cholangitis",
+                               "NA" = "Brez podatka"
+                               ))+
+  guides(fill = guide_legend(title = NULL))+
+  ggtitle("Graifčni prikaz indikacij za transplantacijo jeter")+
+  theme(plot.title = element_text(size=12), legend.text = element_text(size = 5))
+  
+```
+
+
+
+# Analiza raziskovalnega vprašanja
+## Spearmanov korelacijski test
+
+Za preverjanje povezanosti med zvezno in dihotomno spremenljivko bomo uporabili Spearmanov koeficient korelacije.
+
+Izvedli bomo test Spearmanove korelacije (neparametričen test). Zanima nas, ali obstaja povezanost med dolžino intenzivne oskrbe prejemnika z nujnostjo transplantacije.
+
+Testiramo domnevo: 
+H0: Na populaciji bolnikov s transplantacijo jeter ne prihaja do monotone povezanosti med dolžino intenzivne oskrbe prejemnika z nujnostjo transplantacije.
+
+```{r}
+#za test spremenimo v numerično obliko
+ociscen$recipient_urgency = as.numeric(ociscen$recipient_urgency)
+
+#izvedemo test spearmanove korelacije in izpišemo vrednosti testa
+pov = cor(ociscen$recipient_urgency,ociscen$days_ICU, method = "spearman")
+test = cor.test(ociscen$recipient_urgency,ociscen$days_ICU, method = "spearman", exact=FALSE)
+SpearmanK = round(test$estimate, 3)
+SpearmanP = round(test$p.value, 3)
+```
+
+Za uporabo Spearmanovega korelacijskega testa velja naslednje:
+
+  1. neodvisnost enot (pacienti so med sabo neodvisni),
+  2. monotona in ne nujno linearna povezanost,
+  3. uporaba na podatkih, ki niso nujno porazdeljeni normalno.
+  
+Pri Spearmanovem korelacijskem testu velja neodvisnost enost, kar v našem primeru zagotavlja naročnik. 
+  
+Predpostavko o monotoni povezanosti preverimo s prikazom razsevnega grafikona analiziranih vrednosti:
+```{r}
+# graf porazdelitve števila dni v intenzivni oskrbi gled ena stopnjo nujnosti
+ggplot(ociscen, aes(x=as.numeric(recipient_urgency), y=days_ICU)) +
+  geom_point() +
+  labs(x="Stopnja nujnosti (1-naročeni, 2-urgentno)", y="Število dni v intenzivni oskrbi")+
+  ggtitle("Graf porazdelitve števila dni v intenzivni oskrbi glede na stopnjo nujnosti")+
+  theme(plot.title = element_text(size=12))
+```
+
+
+
+  Na grafu je prikaz števila dni v intenzivni oskrbi v odvisnosti od stopnje nujnosti. Pri tem bi lahko šlo za povezanost, ki ni linearna, zato predpostavko št. 2 potrdimo.
+
+
+ Z grafom preverimo, kako so porazdeljeni podatki s prikazom gostote števila dni v intenzivni oskrbi.
+
+```{r}
+#graf porazdelitve števila dni v intenzivni oskrbi
+ggplot(ociscen, aes(x=days_ICU)) +
+  geom_density()+
+  labs(x="Število dni v intenzivni oskrbi", y="Gostota")+
+  ggtitle("Graf porazdelitve števila dni v intenzivni oskrbi")+
+  theme(plot.title = element_text(size=12))
+```
+ 
+  
+  Iz grafa ugotovimo, da število dni ni porazdeljeno normalno, kar ne moti Spearmanovega testa korelacije, saj Spearmanov test med sabo primerja range. Je pa zaradi ne normalne porazdeljenosti Spearmanov test korelacije edini primeren, saj bi za drug test (npr. Pearsonov) bila potrebna normalna porazdelitev.
+
+V tabeli (Table 3) je prikaz dobljenih vrednosti s testom Spearmanove korelacije.
+```{r}
+#ustvarimo podatkovni okvir za vrednosti iz spearmanovega testa
+SpearmanT = data.frame(
+  "Spearmanov koeficient" = pov,
+  "p vrednost" = SpearmanP
+)
+
+#tabela vrednosti Spearmanov test
+SpearmanT %>%
+  kbl(caption="Test Spearmanove korelacije") %>%
+  kable_styling(full_width = T, latex_options = "hold_position")
+```
+
+Ugotovimo, da je vrednost p (`r SpearmanP`) večja od 0.05, zato ničelne hipoteze ne zavrnemo. 
+
+## Fisherjev test
+
+Zaradi uporabe testa Spearmanovega koeficienta z dihotomno spremenljivko se odločimo še za uporabo Fisherjevega testa. Pri tem zvezno spremenljivko število dni v intenzivni oskrbi spremenimo v diskretno spremenljivko z dvema kategorijama: število dni v intenzivni oskrbi do vključno 5 dni in nad 5 dni. Stopnja nujnosti transplantacije se deli v dve kategoriji: urgentno in naročeni. 
+
+Izvedli bomo Fisherjev test. Zanima nas ali obstaja povezanost med dolžino intenzivne oskrbe prejemnika z nujnostjo transplantacije. Pri modelu Fischer predpostavljamo neodvisnost enot, kar nam zagotavlja naročnik.
+
+H0: Na populaciji bolnikov s transplantacijo jeter ne prihaja do povezanosti med dolžino intenzivne oskrbe prejemnika z nujnostjo transplantacije.
+
+Prikaz kontingenče tabele (Table 4) uporabljene za izvedbo Fisherjevega testa.
+
+```{r}
+ociscen$recipient_urgency = as.factor(ociscen$recipient_urgency)
+levels(ociscen$recipient_urgency) = c("naročeni", "urgentno")
+
+kt = table(ociscen$recipient_urgency, ociscen$dni_ICU)
+
+#kontingenčna tabela
+ktTabela = kable(kt, col.names=c("do vključno 5 dni", "nad 5 dni"), 
+      caption="Preglednica dolžine intenzivne oskrbe in stopnje nujnosti transplantacije") %>%
+  kable_styling(full_width = T, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Dolžina intenzivne oskrbe" = 2), align = "c")
+```
+
+```{r}
+ktTabela
+```
+
+
+Grafični prikaz podatkov števila enot po kategorijah števila dni v intenzivni oskrbi. 
+
+```{r}
+#graf št. dni glede na stopnjo nujnosti
+ggplot(data=ociscen)+
+  geom_bar(aes(x=dni_ICU))+
+  facet_grid(.~recipient_urgency)+
+  xlab("Število dni v intenzivni oskrbi")+
+  ylab("Frekvenca")+
+  ggtitle("Frekvenca števila dni v intenzivni oskrbi (kategorično) glede na stopnjo nujnosti")+
+  theme(plot.title = element_text(size=12))
+```
+
+Z izvedbo testa Fisher dobimo vrednosti prikazane v preglednici (Table 5).
+```{r fig.pos='H'}
+# chi kvadrat test
+
+#kt = table(ociscen$recipient_urgency, ociscen$dni_ICU)
+#rezultatHi = chisq.test(kt)
+#rezultatHi$observed
+#rezultatHi$expected
+
+#za chi kvadrat je potrebno, da je več kot 80% pričakovanih frekvenc večjih od 5
+#torej v primeru, ko ni dobro uporabit Hikvadrat test, uporabimo Fisherjev test
+
+#naredimo fiserjev test in izpis p vrendosti
+rezultatiFi = fisher.test(kt)
+pvrednost = round(rezultatiFi$p.value, 3)
+
+#tabela vrednosti iz fiserjevega testa
+FisherT = data.frame(
+  "testna statisitka" = round(rezultatiFi$estimate, 3),
+  "interval zaupanja" = c(paste0(round(rezultatiFi$conf.int[1], 3), " - ", round(rezultatiFi$conf.int[2], 3))),
+  "p vrednost" = round(pvrednost, 3)
+)
+
+FisherT = as.data.frame(t(FisherT))
+
+
+FisherT %>%
+  kbl(caption="Test Fisher", col.names = c("vrednost")) %>%
+  kable_styling(full_width = T, latex_options = "hold_position")
+```
+ 
+Ugotovimo, da je vrednost p (`r pvrednost`) večja od 0.05, zato ničelne hipoteze ne zavrnemo.
+
+# Interpretacija rezultatov
+
+Za preverjanje zastavljenega vprašanja ali je dolžina intenzivne oskrbe prejemnika povezana z nujnostjo transplantacije smo izračunali Spearmanov koeficient korelacije in naredili Fisherjev test.
+
+S preverjanjem Spearmanove korelacije preverjamo monotono povezanost med spremenljivkama. S testom Spearmanove korelacije dobimo vrednost poveznosti `r pov`, ki kaže na zelo šibko monotono povezanost. To bi pomenilo, da se s spremembo nujnosti iz naročeni v urgentno, zelo šibko poveča število dni v intenzivni oskrbi.
+Vrednost korelacije je definirana na intervalu od -1 do 1, kjer -1 pomeni popolno negativno povezanost in 1 popolno pozitivno povezanost. Vrednost 0 pomeni, da ni povezanosti.
+S testom Spearmanove korelacije dobimo vrednost p = `r SpearmanP`, ki je večja od $\alpha$ = 0,05, zato ničelne hipoteze ne moremo zavrniti.
+Pri 5% stopnji tveganja ne moremo trditi, da na  populaciji bolnikov s transplantacijo jeter prihaja do povezanosti med dolžino intenzivne oskrbe prejemnika z nujnostjo transplantacije. 
+
+Dodatno smo za občutljivostno analizo naredili Fisherjev test, ki preverja povezanost med dvema diskretnima spremenljivama. V ta namen smo število dni v intenzivni oskrbi razdelili v dve kategoriji - do vključno 5 dni in nad 5 dni v intenzivni oskrbi. Za Fisherjev test smo se odločili, ker s hi-kvadrat testom ne bi uspeli razvrstiti enote v kategorije, da bi dosegli potreben pogoj, kjer bi moralo biti vsaj 80% pričakovanih frekvenc v kategorijah večjih od 5 enot.
+Z dvostranskim testom Fisher dobimo vrednost p = `r pvrednost`, ki je večja od $\alpha$ = 0,05, zato ničelne hipoteze ne moremo zavrniti. 
+Pri 5% stopnji tveganja tako ne moremo trditi, da na populaciji bolnikov s transplantacijo jeter prihaja do povezanosti med dolžino intenzivne oskrbe prejemnika z nujnostjo transplantacije.
+
+Pri obeh testih je opaziti majhno število urgentnih in veliko število naročenih enot. To bi lahko vplivalo na testiranje. Za zaneslivejše rezultate bi bilo primerno uporabiti vzorec, ki ni randomiziran. Za priodbivanje podatkov bi lahko naredili študijo primerov in kontrol, da bi zajeli enako število naročenih in urgentnih stanj. Iz vzorca je namreč razvidno, da je nujnih stanj v povprečju manj kot naročenih, kar pa vpliva na izvedbo analize.
+
+# Zaključek
+V poročilu smo ugotavljali ali je dolžina intenzivne oskrbe prejemnika povezana z nujnostjo transplantacije. Najprej smo izvedli Spearmanov korelacijski test. Z vrednostjo korealcije (`r pov`) bi lahko povezanost opisali kot zelo šibko, vendar je z vrednostjo p (`r SpearmanP`), ki je bila večja od 0,05, nismo mogli potrditi. Dodatno smo naredili še Fisherjev test, s katerim z vrednostjo p (`r pvrednost`) večjo od 0,05, nismo mogli zavreči ničelne hipoteze. Na podlagi teh dveh testov ne moremo ničesar povedati o povezanosti spremenljivk. Problem testiranja bi lahko bil majhen oziroma neenakomerno razporejen vzorec enot med stopnjo nujnosti: naročeni in urgentno. Za testiranje zastavljenega vprašanja bi bilo smiselno narediti študijo primerov in kontrol.
